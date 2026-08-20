@@ -1,8 +1,19 @@
 "use client";
 import React from "react";
 import Link from 'next/link';
+import { useRedirectIfAuthed } from "@/app/hooks/useRedirectIfAuthed";
 
 export default function EmployeeRecognitionLanding() {
+  const { checkingAuth } = useRedirectIfAuthed("/home");
+
+  if (checkingAuth) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#e9eaf0]">
+        <p className="text-[#1a0dc9] font-black uppercase tracking-wider text-sm">Loading...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#e9eaf0] flex items-center justify-center p-4">
       <div className="w-full max-w-xl bg-[#e9eaf0] rounded-2xl overflow-hidden shadow-sm">

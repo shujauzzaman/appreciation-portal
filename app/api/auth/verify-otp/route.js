@@ -306,6 +306,13 @@ export async function POST(request) {
       dob: registration.dob,
       joiningDate: registration.joiningDate,
 
+      // New accounts always start as a plain employee.
+      // "manager" / "hod" / "admin" are assigned manually in Firestore.
+      role: "employee",
+
+      // Recognition/points balance, starts at 0.
+      points: 0,
+
       emailVerified: true,
 
       createdAt: new Date(),

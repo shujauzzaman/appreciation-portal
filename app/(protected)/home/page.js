@@ -2,46 +2,30 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { onAuthStateChanged, signOut, updateEmail, updatePassword } from "firebase/auth";
-import { addDoc, collection, serverTimestamp, doc, updateDoc } from "firebase/firestore";
+import { doc, updateDoc } from "firebase/firestore";
 import { auth, db } from "@/firebase/config";
-import { Camera, Search, ChevronDown, Paperclip, Smile, Image as ImageIcon, Send, Lock, X, ArrowRight, User, LogOut, Mail, Phone, KeyRound, BarChart3 } from 'lucide-react';
+
+import {
+  Camera, Search, ChevronDown, Paperclip, Smile, Image as ImageIcon, Send, Lock, X,
+  ArrowRight, User, LogOut, Mail, Phone, KeyRound, BarChart3,
+} from 'lucide-react';
 import Link from 'next/link';
 
-import { useEmployeeData, useEmployeeDirectory } from "../hooks/useEmployees";
-import { usePostsFeed } from "../hooks/usePosts";
+import { useEmployeeData, useEmployeeDirectory } from "../../hooks/useEmployees";
+import { usePostsFeed } from "../../hooks/usePosts";
 import { updateEmployeePhoto } from "@/app/services/employees";
 
 import Announcements from "@/app/components/Announcements";
 import Leaderboard from "@/app/components/Leaderboard";
 import WeeklyPoll from "@/app/components/WeeklyPoll";
 import Post from "@/app/components/Post";
+import { BADGE_OPTIONS, getBadgeById } from "@/app/constants/badges";
 
 const LEVEL_OPTIONS = [
   { label: "Thank You!", emoji: "💖" },
   { label: "Good Job!", emoji: "👍" },
   { label: "Impressive!", emoji: "⭐" },
   { label: "Exceptional!", emoji: "🏆" },
-];
-
-// Values for the "Nominate" tab — each maps to an actual PNG in /public
-const VALUE_OPTIONS = [
-  { name: "Innovation", image: "/inovation.png" },
-  { name: "Teamwork", image: "/teamwork.png" },
-  { name: "Customers", image: "/customer.png" },
-  { name: "Urgency", image: "/urgency.png" },
-  { name: "Quality", image: "/quilty.png" },
-  { name: "All", image: "/All.png" },
-];
-
-// Badges for the "Nominate" tab — top row of 3, bottom row of 2
-const BADGE_OPTIONS_TOP = [
-  { id: "Innovator", label: "Innovator Badge", image: "/inovator.png" },
-  { id: "Ownership", label: "Ownership Badge", image: "/ownership.png" },
-  { id: "Excellence", label: "Excellence Badge", image: "/excellence.png" },
-];
-const BADGE_OPTIONS_BOTTOM = [
-  { id: "TeamPlayer", label: "Team Player Badge", image: "/team.png" },
-  { id: "Integrity", label: "Integrity Badge", image: "/integrity.png" },
 ];
 
 const MAX_DROPDOWN_RESULTS = 8;
@@ -233,8 +217,7 @@ export default function Home() {
   const [showEmployeeDropdown, setShowEmployeeDropdown] = useState(false);
 
   // ===== Nominate tab state =====
-  const [selectedValue, setSelectedValue] = useState('Innovation');
-  const [selectedBadge, setSelectedBadge] = useState('Innovator');
+  const [selectedBadge, setSelectedBadge] = useState('Initiative');
   const [nominateSearch, setNominateSearch] = useState('');
   const [nominateRecipient, setNominateRecipient] = useState(null);
   const [showNominateDropdown, setShowNominateDropdown] = useState(false);
@@ -265,33 +248,33 @@ export default function Home() {
     if (activeTab === 'nominate') {
       if (!nominateRecipient) return alert("Please select who you'd like to nominate.");
 
+      const badgeInfo = getBadgeById(selectedBadge);
+
       setSendingPost(true);
       try {
-        await addDoc(collection(db, "posts"), {
-          type: "nominate",
-          senderId: currentUser.uid,
-          senderName: displayName,
-          senderPhotoURL: employeeData?.photoURL || null,
-          recipientId: nominateRecipient.id,
-          recipientName: `${nominateRecipient.firstName || ''} ${nominateRecipient.lastName || ''}`.trim().toUpperCase(),
-          recipientDepartment: nominateRecipient.department || '',
-          recipientPhotoURL: nominateRecipient.photoURL || null,
-          value: selectedValue,
-          badge: selectedBadge,
-          likedBy: [],
-          clapedBy: [],
-          shareCount: 0,
-          createdAt: serverTimestamp(),
+        const idToken = await currentUser.getIdToken();
+        const res = await fetch("/api/posts/create", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${idToken}`,
+          },
+          body: JSON.stringify({
+            type: "nominate",
+            recipientId: nominateRecipient.id,
+            badge: badgeInfo?.id || selectedBadge,
+          }),
         });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Failed to send.");
 
         setNominateRecipient(null);
         setNominateSearch('');
-        setSelectedValue('Innovation');
-        setSelectedBadge('Innovator');
+        setSelectedBadge('Initiative');
         setIsModalOpen(false);
       } catch (err) {
         console.error("Error saving nomination:", err);
-        alert("Failed to send. Please try again.");
+        alert(err.message || "Failed to send. Please try again.");
       } finally {
         setSendingPost(false);
       }
@@ -307,22 +290,22 @@ export default function Home() {
 
     setSendingPost(true);
     try {
-      await addDoc(collection(db, "posts"), {
-        type: "recognize",
-        senderId: currentUser.uid,
-        senderName: displayName,
-        senderPhotoURL: employeeData?.photoURL || null,
-        recipientId: selectedRecipient.id,
-        recipientName: `${selectedRecipient.firstName || ''} ${selectedRecipient.lastName || ''}`.trim().toUpperCase(),
-        recipientDepartment: selectedRecipient.department || '',
-        recipientPhotoURL: selectedRecipient.photoURL || null,
-        level: selectedLevel,
-        message: appreciateMessage.trim(),
-        likedBy: [],
-        clapedBy: [],
-        shareCount: 0,
-        createdAt: serverTimestamp(),
+      const idToken = await currentUser.getIdToken();
+      const res = await fetch("/api/posts/create", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({
+          type: "recognize",
+          recipientId: selectedRecipient.id,
+          level: selectedLevel,
+          message: appreciateMessage.trim(),
+        }),
       });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to send.");
 
       setSelectedRecipient(null);
       setAppreciateMessage('');
@@ -331,7 +314,7 @@ export default function Home() {
       setIsModalOpen(false);
     } catch (err) {
       console.error("Error saving post:", err);
-      alert("Failed to send. Please try again.");
+      alert(err.message || "Failed to send. Please try again.");
     } finally {
       setSendingPost(false);
     }
@@ -709,10 +692,11 @@ export default function Home() {
               )}
 
               {/* ========================================================== */}
-              {/* NOMINATE TAB — single unified card, top-to-bottom layout    */}
+              {/* NOMINATE TAB — avatars/search, then single scalloped badge  */}
+              {/* row, then a description box for the selected badge          */}
               {/* ========================================================== */}
               {activeTab === 'nominate' && (
-                <div className="bg-white border-2 border-purple-500 rounded-2xl p-6 shadow-sm relative overflow-hidden max-w-xl mx-auto">
+                <div className="bg-white border-2 border-gray-200 rounded-2xl p-6 shadow-sm relative max-w-5xl mx-auto">
 
                   {/* 1. Profile → Recipient photos */}
                   <div className="flex flex-col items-center text-center">
@@ -792,55 +776,29 @@ export default function Home() {
                     <div className="w-full border-b border-gray-200 my-4"></div>
                   </div>
 
-                  {/* 3. "BADGES" heading — right below search */}
-                  <div className="text-center">
-                    <h2 className="text-2xl font-black text-black tracking-widest uppercase mb-1">
-                      BADGES
-                    </h2>
-                    <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider pb-2">
-                      Recognition aligned with our values. Impact that inspires.
-                    </p>
-                  </div>
-
-                  {/* 4. All badges together in one grid */}
-                  <div className="grid grid-cols-3 sm:grid-cols-5 gap-3 mt-4 justify-items-center">
-                    {[...BADGE_OPTIONS_TOP, ...BADGE_OPTIONS_BOTTOM].map((badge) => {
+                  {/* 3. Badge selection — single row of 5 scalloped seals */}
+                  <div className="flex flex-nowrap justify-center items-start gap-2 sm:gap-6 px-1">
+                    {BADGE_OPTIONS.map((badge) => {
                       const isSelected = selectedBadge === badge.id;
                       return (
                         <div
                           key={badge.id}
                           onClick={() => setSelectedBadge(badge.id)}
-                          className={`flex flex-col items-center text-center cursor-pointer p-2 rounded-xl border-2 transition-all duration-150 w-24 ${isSelected ? 'border-[#001c7f] bg-blue-50/20' : 'border-transparent'}`}
+                          className="relative flex flex-col items-center text-center cursor-pointer group flex-1 min-w-0 max-w-[9rem]"
                         >
-                          <div className="w-14 h-14 flex items-center justify-center">
-                            <img src={badge.image} alt={badge.label} className="w-full h-full object-contain" />
+                          {/* Hover tooltip with the badge description */}
+                          <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-40 sm:w-48 opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-30">
+                            <div className="bg-gray-800 text-white text-[10px] font-semibold leading-snug rounded-lg px-3 py-2 shadow-lg">
+                              {badge.description}
+                            </div>
+                            <div className="w-2 h-2 bg-gray-800 rotate-45 mx-auto -mt-1"></div>
                           </div>
-                          <span className="text-[10px] font-black uppercase text-gray-800 leading-tight mt-2">
-                            {badge.label}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
 
-                  <div className="w-full border-b border-gray-200 my-4"></div>
-
-                  {/* Values 6-Grid Selection — using actual PNG images */}
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 my-2">
-                    {VALUE_OPTIONS.map((val) => {
-                      const isSelected = selectedValue === val.name;
-                      return (
-                        <div
-                          key={val.name}
-                          onClick={() => setSelectedValue(val.name)}
-                          className="flex flex-col items-center text-center cursor-pointer group"
-                        >
-                          <div className={`w-16 h-16 flex items-center justify-center transition-all duration-150 group-hover:scale-110 ${isSelected ? 'ring-4 ring-offset-2 ring-[#001c7f] rounded-full' : ''}`}>
-                            <img src={val.image} alt={val.name} className="w-full h-full object-contain" />
-                          </div>
-                          <span className={`text-[11px] font-black uppercase mt-1.5 transition-colors duration-150 ${isSelected ? 'text-[#001c7f]' : 'text-gray-600'}`}>
-                            {val.name}
-                          </span>
+                          <img
+                            src={badge.image}
+                            alt={badge.label}
+                            className={`w-full h-auto object-contain transition-transform duration-150 ${isSelected ? 'scale-110' : 'group-hover:scale-105 opacity-90 group-hover:opacity-100'}`}
+                          />
                         </div>
                       );
                     })}

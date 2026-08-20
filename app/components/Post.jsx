@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { Heart, Repeat2 } from 'lucide-react';
 import { toggleLike, toggleClap, incrementShareCount } from "@/app/services/posts";
+import { getBadgeById } from "@/app/constants/badges";
 
 const SHARE_OPTIONS = ["Copy Link", "Team Chat", "Email"];
 
@@ -13,6 +14,9 @@ export default function Post({ post, currentUserUid }) {
   const clapped = post.clapedBy?.includes(currentUserUid) || false;
   const likeCount = post.likedBy?.length || 0;
   const clapCount = post.clapedBy?.length || 0;
+
+  const isNomination = post.type === 'nominate';
+  const badgeInfo = isNomination ? getBadgeById(post.badge) : null;
 
   const handleLikeClick = async () => {
     if (!currentUserUid) return;
@@ -74,7 +78,10 @@ export default function Post({ post, currentUserUid }) {
       <div className="p-6 flex-grow flex flex-col">
         <div className="text-center mt-12">
           <h4 className="text-base font-black text-[#001c7f] uppercase tracking-wide">
-            {post.recipientName} <span className="text-gray-700 font-bold">WAS APPRECIATED BY</span>
+            {post.recipientName}{' '}
+            <span className="text-gray-700 font-bold">
+              {isNomination ? 'WAS NOMINATED BY' : 'WAS APPRECIATED BY'}
+            </span>
           </h4>
           <h4 className="text-base font-black text-[#001c7f] uppercase tracking-wide mt-1.5">
             {post.senderName}
@@ -85,13 +92,35 @@ export default function Post({ post, currentUserUid }) {
         </div>
 
         <div className="bg-[#001c7f]/5 rounded-lg p-6 mt-6 border border-[#001c7f]/10 flex flex-col items-center justify-center flex-grow">
-          <h1 className="text-[#001c7f] font-black text-3xl md:text-4xl tracking-widest text-center uppercase">
-            {post.level || "CHEERS!!!"}
-          </h1>
-          {post.message && (
-            <p className="text-gray-700 font-semibold text-sm text-center mt-4 max-w-lg">
-              {post.message}
-            </p>
+          {isNomination ? (
+            badgeInfo ? (
+              <>
+                <img
+                  src={badgeInfo.image}
+                  alt={badgeInfo.label}
+                  className="w-36 h-auto md:w-44 object-contain"
+                />
+                <p className="text-gray-600 font-semibold text-xs text-center mt-3 max-w-sm">
+                  {badgeInfo.description}
+                </p>
+              </>
+            ) : (
+              // Fallback for older nominate posts saved before this badge set existed
+              <h1 className="text-[#001c7f] font-black text-2xl md:text-3xl tracking-widest text-center uppercase">
+                {post.badgeLabel || post.badge || post.value || "NOMINATED!"}
+              </h1>
+            )
+          ) : (
+            <>
+              <h1 className="text-[#001c7f] font-black text-3xl md:text-4xl tracking-widest text-center uppercase">
+                {post.level || "CHEERS!!!"}
+              </h1>
+              {post.message && (
+                <p className="text-gray-700 font-semibold text-sm text-center mt-4 max-w-lg">
+                  {post.message}
+                </p>
+              )}
+            </>
           )}
         </div>
       </div>
