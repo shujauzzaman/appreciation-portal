@@ -11,6 +11,7 @@ import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { adminAuth, adminDb } from "@/firebase/admin";
 import { calculateRecognitionPoints } from "@/app/constants/points";
+import { getMonthKey } from "@/lib/month-key";
 
 export async function POST(request) {
   try {
@@ -101,11 +102,35 @@ export async function POST(request) {
       postData.badge = badge;
     }
 
-    // 4. Create the post and award points together.
+    // 4. Create the post, then award points in two places:
+    //    - employees.points: lifetime running total (unchanged behavior)
+    //    - monthlyPoints/{recipientId}_{month}: this calendar month's total,
+    //      so month/quarter/year leaderboard tabs can be computed from real
+    //      period-scoped data instead of re-deriving it from `posts` or
+    //      conflating it with the lifetime `employees.points` field.
     const postRef = await adminDb.collection("posts").add(postData);
-    await adminDb.collection("employees").doc(recipientId).update({
-      points: FieldValue.increment(pointsAwarded),
-    });
+
+    const monthKey = getMonthKey();
+    const monthlyRef = adminDb
+      .collection("monthlyPoints")
+      .doc(`${recipientId}_${monthKey}`);
+
+    await Promise.all([
+      adminDb.collection("employees").doc(recipientId).update({
+        points: FieldValue.increment(pointsAwarded),
+      }),
+      monthlyRef.set(
+        {
+          recipientId,
+          month: monthKey,
+          name: recipientName,
+          photoURL: recipient.photoURL || null,
+          department: recipient.department || "",
+          points: FieldValue.increment(pointsAwarded),
+        },
+        { merge: true }
+      ),
+    ]);
 
     return NextResponse.json({ id: postRef.id, pointsAwarded, pointsBreakdown });
   } catch (err) {

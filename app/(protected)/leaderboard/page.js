@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
-import { getLeaderboard } from '@/app/services/leaderboard';
+import { getPeriodLeaderboard } from '@/app/services/leaderboard';
 
 function splitName(name) {
   if (!name) return ["—", ""];
@@ -16,7 +16,7 @@ export default function LeaderboardPage() {
 
   useEffect(() => {
     let cancelled = false;
-    getLeaderboard(activeTab)
+    getPeriodLeaderboard(activeTab)
       .then((data) => { if (!cancelled) setRankings(data); })
       .catch((err) => console.error("Error loading leaderboard:", err));
     return () => { cancelled = true; };

@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { onAuthStateChanged, signOut, updateEmail, updatePassword } from "firebase/auth";
+import { onAuthStateChanged, signOut, updateEmail, updatePassword, reauthenticateWithCredential, EmailAuthProvider } from "firebase/auth";
 import { doc, updateDoc } from "firebase/firestore";
 import { auth, db } from "@/firebase/config";
 
@@ -124,6 +124,7 @@ export default function Home() {
     lastName: '',
     email: '',
     phone: '',
+    currentPassword: '',
     newPassword: '',
     confirmPassword: '',
   });
@@ -134,6 +135,7 @@ export default function Home() {
       lastName: employeeData?.lastName || '',
       email: currentUser?.email || '',
       phone: employeeData?.phone || '',
+      currentPassword: '',
       newPassword: '',
       confirmPassword: '',
     });
@@ -156,6 +158,11 @@ export default function Home() {
       alert("Please enter a valid email.");
       return;
     }
+    const trimmedPhone = profileForm.phone.trim();
+    if (trimmedPhone && !/^[0-9+\-\s()]{6,20}$/.test(trimmedPhone)) {
+      alert("Please enter a valid phone number.");
+      return;
+    }
     if (profileForm.newPassword && profileForm.newPassword.length < 6) {
       alert("Password must be at least 6 characters.");
       return;
@@ -165,44 +172,97 @@ export default function Home() {
       return;
     }
 
+    const emailChanged = profileForm.email.trim() !== currentUser.email;
+    const changingPassword = !!profileForm.newPassword;
+
+    // Both updateEmail() and updatePassword() are "sensitive" Firebase Auth
+    // operations — they throw auth/requires-recent-login unless the user
+    // signed in within roughly the last few minutes. Rather than let that
+    // throw (and force a full logout/login), ask for their current
+    // password up front and re-authenticate right before either call.
+    if (emailChanged || changingPassword) {
+      if (!profileForm.currentPassword) {
+        alert("Please enter your current password to change your email or password.");
+        return;
+      }
+    }
+
     setSavingProfile(true);
+
+    // Each piece is updated independently, with its own try/catch, so:
+    //  - one failure (e.g. a Firestore rules rejection on a specific field)
+    //    doesn't silently swallow/skip the others
+    //  - the alert the user sees actually says which part failed, instead
+    //    of a single generic "Failed to update profile"
+    const failures = [];
+
     try {
-      // Update Firestore employee record (name + phone)
       await updateDoc(doc(db, "employees", currentUser.uid), {
         firstName: profileForm.firstName.trim(),
         lastName: profileForm.lastName.trim(),
-        phone: profileForm.phone.trim(),
+        phone: trimmedPhone,
       });
-
-      // Update auth email if changed
-      if (profileForm.email.trim() !== currentUser.email) {
-        await updateEmail(currentUser, profileForm.email.trim());
-      }
-
-      // Update auth password if provided
-      if (profileForm.newPassword) {
-        await updatePassword(currentUser, profileForm.newPassword);
-      }
-
       setEmployeeData((prev) => ({
         ...prev,
         firstName: profileForm.firstName.trim(),
         lastName: profileForm.lastName.trim(),
-        phone: profileForm.phone.trim(),
+        phone: trimmedPhone,
       }));
-
-      setIsProfileModalOpen(false);
-      alert("Profile updated successfully!");
     } catch (err) {
-      console.error("Error updating profile:", err);
-      if (err.code === "auth/requires-recent-login") {
-        alert("This change requires you to log in again. Please log out and log back in, then try again.");
+      console.error("Error updating employee profile doc:", err);
+      if (err.code === "permission-denied") {
+        failures.push(
+          "Profile details (name/phone) — permission denied. This field may not be allowed by the current Firestore rules."
+        );
       } else {
-        alert(err.message || "Failed to update profile. Please try again.");
+        failures.push(`Profile details (name/phone) — ${err.message || "failed to save"}.`);
       }
-    } finally {
-      setSavingProfile(false);
     }
+
+    // Re-authenticate once, up front, if either sensitive change was requested.
+    let reauthOk = true;
+    if (emailChanged || changingPassword) {
+      try {
+        const credential = EmailAuthProvider.credential(currentUser.email, profileForm.currentPassword);
+        await reauthenticateWithCredential(currentUser, credential);
+      } catch (err) {
+        console.error("Error re-authenticating:", err);
+        reauthOk = false;
+        if (err.code === "auth/invalid-credential" || err.code === "auth/wrong-password") {
+          failures.push("Current password is incorrect — email/password were not changed.");
+        } else {
+          failures.push(`Re-authentication failed — ${err.message || "email/password were not changed."}`);
+        }
+      }
+    }
+
+    if (emailChanged && reauthOk) {
+      try {
+        await updateEmail(currentUser, profileForm.email.trim());
+      } catch (err) {
+        console.error("Error updating auth email:", err);
+        failures.push(`Email — ${err.message || "failed to save"}.`);
+      }
+    }
+
+    if (changingPassword && reauthOk) {
+      try {
+        await updatePassword(currentUser, profileForm.newPassword);
+      } catch (err) {
+        console.error("Error updating auth password:", err);
+        failures.push(`Password — ${err.message || "failed to save"}.`);
+      }
+    }
+
+    setSavingProfile(false);
+
+    if (failures.length > 0) {
+      alert(`Some changes could not be saved:\n\n${failures.join("\n")}`);
+      return;
+    }
+
+    setIsProfileModalOpen(false);
+    alert("Profile updated successfully!");
   };
 
   // ===================== APPRECIATION MODAL =====================
@@ -533,6 +593,21 @@ export default function Home() {
                   className="w-full mt-1 border-2 border-gray-300 rounded-md px-3 py-2 text-sm font-bold text-gray-700 focus:border-[#001c7f] outline-none"
                 />
               </div>
+
+              {(profileForm.email.trim() !== currentUser?.email || profileForm.newPassword) && (
+                <div className="border-t border-gray-100 pt-4">
+                  <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
+                    <Lock className="w-3.5 h-3.5" /> Current Password
+                  </label>
+                  <input
+                    type="password"
+                    value={profileForm.currentPassword}
+                    onChange={(e) => handleProfileFieldChange('currentPassword', e.target.value)}
+                    placeholder="Required to change email or password"
+                    className="w-full mt-1 border-2 border-gray-300 rounded-md px-3 py-2 text-sm font-bold text-gray-700 focus:border-[#001c7f] outline-none"
+                  />
+                </div>
+              )}
 
               <div className="border-t border-gray-100 pt-4">
                 <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
