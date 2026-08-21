@@ -51,6 +51,21 @@ export async function getPeriodLeaderboard(period) {
   return aggregateByRecipient(snap.docs);
 }
 
+// Top point earner for a single calendar year (used by the Hall of Fame's
+// "Yearly Winners" row). Built from the same `monthlyPoints` collection as
+// getPeriodLeaderboard, just scoped to an arbitrary year instead of "now".
+// Returns null if nobody earned points that year yet.
+export async function getYearlyTopEmployee(year) {
+  const monthKeys = getYearMonthKeys(new Date(Date.UTC(year, 0, 1)));
+
+  const monthlyRef = collection(db, "monthlyPoints");
+  const q = query(monthlyRef, where("month", "in", monthKeys));
+  const snap = await getDocs(q);
+
+  const ranked = aggregateByRecipient(snap.docs);
+  return ranked[0] || null;
+}
+
 // All-time leaderboard, read straight from each employee's running
 // `points` total (maintained via increment() on every recognition/badge).
 // Only includes employees who have actually earned points.

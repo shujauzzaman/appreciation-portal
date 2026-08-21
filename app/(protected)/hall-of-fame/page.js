@@ -1,12 +1,45 @@
 "use client";
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, ChevronDown } from 'lucide-react';
+import { getYearlyTopEmployee } from '@/app/services/leaderboard';
+
+function splitName(name) {
+  if (!name) return ["—", ""];
+  const parts = name.trim().split(/\s+/);
+  return [parts[0], parts.slice(1).join(" ")];
+}
 
 export default function HallOfFamePage() {
   const [byMonth, setByMonth] = useState('By Month');
   const [groupByBadges, setGroupByBadges] = useState('Group by Badges');
   const [department, setDepartment] = useState('All Departments');
+
+  // Last 3 calendar years, most recent last — recomputed off the current
+  // date each load so this row doesn't need updating year to year.
+  const currentYear = new Date().getUTCFullYear();
+  const years = [currentYear - 2, currentYear - 1, currentYear];
+
+  const [yearlyWinners, setYearlyWinners] = useState({}); // year -> winner | null
+  const [loadingYears, setLoadingYears] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoadingYears(true);
+
+    Promise.all(years.map((year) => getYearlyTopEmployee(year)))
+      .then((results) => {
+        if (cancelled) return;
+        const byYear = {};
+        years.forEach((year, i) => { byYear[year] = results[i]; });
+        setYearlyWinners(byYear);
+      })
+      .catch((err) => console.error("Error loading yearly winners:", err))
+      .finally(() => { if (!cancelled) setLoadingYears(false); });
+
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentYear]);
 
   // Badge list mockup with precise custom SVGs
   const badgeRows = [
@@ -137,25 +170,46 @@ export default function HallOfFamePage() {
 
           {/* 1. Yearly Winners (Top Row) */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-4xl mx-auto py-4">
-            {[2023, 2024, 2025].map((year) => (
-              <div key={year} className="flex items-center gap-4 justify-center md:justify-start">
-                {/* Profile Placeholder Avatar */}
-                <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-full border-4 border-gray-100 overflow-hidden bg-sky-200 shadow-md flex-shrink-0">
-                  <div className="absolute inset-0 bg-sky-300"></div>
-                  <div className="absolute bottom-0 w-full h-10 bg-green-500 rounded-t-full"></div>
-                  <div className="absolute top-2 left-4 w-10 h-6 bg-white opacity-40 rounded-full"></div>
+            {years.map((year) => {
+              const winner = yearlyWinners[year];
+              const [line1, line2] = splitName(winner?.name);
+
+              return (
+                <div key={year} className="flex items-center gap-4 justify-center md:justify-start">
+                  {/* Winner Avatar */}
+                  <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-full border-4 border-gray-100 overflow-hidden bg-sky-200 shadow-md flex-shrink-0">
+                    {winner?.photoURL ? (
+                      <img src={winner.photoURL} alt={winner.name} className="absolute inset-0 w-full h-full object-cover" />
+                    ) : (
+                      <>
+                        <div className="absolute inset-0 bg-sky-300"></div>
+                        <div className="absolute bottom-0 w-full h-10 bg-green-500 rounded-t-full"></div>
+                        <div className="absolute top-2 left-4 w-10 h-6 bg-white opacity-40 rounded-full"></div>
+                      </>
+                    )}
+                  </div>
+                  {/* Winner Details */}
+                  <div className="text-left">
+                    {loadingYears ? (
+                      <h3 className="font-black text-gray-300 text-sm sm:text-base leading-tight uppercase">
+                        Loading&hellip;
+                      </h3>
+                    ) : winner ? (
+                      <h3 className="font-black text-gray-900 text-sm sm:text-base leading-tight uppercase">
+                        {line1}<br />{line2}
+                      </h3>
+                    ) : (
+                      <h3 className="font-black text-gray-400 text-sm sm:text-base leading-tight uppercase">
+                        No Winner Yet
+                      </h3>
+                    )}
+                    <p className="text-gray-500 font-bold text-xs sm:text-sm mt-1">
+                      Year {year}
+                    </p>
+                  </div>
                 </div>
-                {/* Profile Details */}
-                <div className="text-left">
-                  <h3 className="font-black text-gray-900 text-sm sm:text-base leading-tight uppercase">
-                    Muhammad<br />Muhammad
-                  </h3>
-                  <p className="text-gray-500 font-bold text-xs sm:text-sm mt-1">
-                    Year {year}
-                  </p>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           <hr className="border-t border-gray-200" />
