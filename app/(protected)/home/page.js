@@ -7,7 +7,7 @@ import { auth, db } from "@/firebase/config";
 
 import {
   Camera, Search, ChevronDown, Paperclip, Smile, Image as ImageIcon, Send, Lock, X,
-  ArrowRight, User, LogOut, Mail, Phone, KeyRound, BarChart3,
+  ArrowRight, User, LogOut, Mail, Phone, KeyRound, BarChart3, LayoutDashboard,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -73,11 +73,16 @@ export default function Home() {
 
     setUploadingPhoto(true);
     try {
+      const idToken = await currentUser.getIdToken();
+
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("uid", currentUser.uid);
 
-      const res = await fetch("/api/upload-profile-picture", { method: "POST", body: formData });
+      const res = await fetch("/api/upload-profile-picture", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${idToken}` },
+        body: formData,
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Upload failed");
 
@@ -423,18 +428,23 @@ export default function Home() {
                 Profile
               </button>
               {isAdmin && (
+                <>
                 <button
-                  onClick={() => { setShowPortalDropdown(false); router.push('/analytics'); }}
-                  className="w-full flex items-center gap-2.5 px-4 py-3 text-left text-xs font-black text-gray-700 uppercase tracking-wider hover:bg-blue-50 hover:text-[#001c7f] transition-colors border-t border-gray-100"
-                >
-                  <BarChart3 className="w-4 h-4" />
-                  Analytics
-                </button>
+                onClick={() => {
+                  setShowPortalDropdown(false);
+                  router.push("/dashboard");
+                }}
+                className="w-full flex items-center gap-2.5 px-4 py-3 text-left text-xs font-black text-gray-700 uppercase tracking-wider hover:bg-blue-50 hover:text-[#001c7f] transition-colors border-t border-gray-100"
+              >
+                <LayoutDashboard className="w-4 h-4" />
+                Dashboard
+              </button>
+              </>
               )}
               <button
                 onClick={handleLogout}
                 className="w-full flex items-center gap-2.5 px-4 py-3 text-left text-xs font-black text-red-600 uppercase tracking-wider hover:bg-red-50 transition-colors border-t border-gray-100"
-              >
+                >
                 <LogOut className="w-4 h-4" />
                 Logout
               </button>

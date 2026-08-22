@@ -1,6 +1,14 @@
 // app/api/upload-profile-picture/route.js
+//
+// Uploads (and overwrites) a user's profile picture. Like the other
+// write routes, the caller's identity is verified server-side via their
+// Firebase ID token — the uid used for the Cloudinary public_id is taken
+// from the verified token, never trusted from the request body, so one
+// user can't overwrite another user's photo.
+
 import { NextResponse } from "next/server";
 import { v2 as cloudinary } from "cloudinary";
+import { adminAuth } from "@/firebase/admin";
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -10,13 +18,27 @@ cloudinary.config({
 
 export async function POST(request) {
   try {
+    // 1. Verify the caller's identity from their Firebase ID token.
+    const authHeader = request.headers.get("authorization") || "";
+    const idToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+    if (!idToken) {
+      return NextResponse.json({ error: "Missing auth token." }, { status: 401 });
+    }
+
+    let uid;
+    try {
+      const decoded = await adminAuth.verifyIdToken(idToken);
+      uid = decoded.uid;
+    } catch {
+      return NextResponse.json({ error: "Invalid or expired session." }, { status: 401 });
+    }
+
     const formData = await request.formData();
     const file = formData.get("file");
-    const uid = formData.get("uid");
 
-    if (!file || !uid) {
+    if (!file) {
       return NextResponse.json(
-        { error: "Missing file or user ID." },
+        { error: "Missing file." },
         { status: 400 }
       );
     }

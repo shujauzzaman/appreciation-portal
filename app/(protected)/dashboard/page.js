@@ -1297,12 +1297,12 @@ export default function RecognitionDashboard() {
                 <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm flex flex-col">
                   <h3 className="text-sm font-black text-gray-900 uppercase tracking-wider mb-4">Top Recognized Employees</h3>
                   <div className="space-y-4 flex-1">
-                    {isLoadingOverviewStats && !overviewStats ? (
+                    {!overviewStats ? (
                       <p className="text-xs font-bold text-gray-400 uppercase tracking-wider py-4">Loading...</p>
-                    ) : (overviewStats?.topEmployees.length === 0) ? (
+                    ) : overviewStats.topEmployees.length === 0 ? (
                       <p className="text-xs font-bold text-gray-400 uppercase tracking-wider py-4">No recognitions yet.</p>
                     ) : (
-                      overviewStats?.topEmployees.map((emp) => (
+                      overviewStats.topEmployees.map((emp) => (
                         <div key={emp.id} className="flex items-center gap-3">
                           <PersonAvatar size="w-9 h-9" photoURL={emp.photoURL} name={emp.name} />
                           <div className="flex-1 min-w-0">
